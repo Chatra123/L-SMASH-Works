@@ -49,7 +49,25 @@ typedef struct
     } vfr2cfr;
 } lwlibav_option_t;
 
-int lwlibav_construct_index
+
+
+/*==================================
+ * CreateLwi
+ *==================================*/
+#include <stdbool.h>/* CrLwi */
+typedef struct/* CrLwi */
+{
+  char    src_path[_MAX_PATH];
+  char    file_path[_MAX_PATH];
+  char    lwi_path[_MAX_PATH];
+  char    file_path_inner_lwi[_MAX_PATH];
+  bool    mode_pipe_input;
+  bool    create_footer;
+  double read_limit_MiBsec;
+} crlwi_setting;
+
+
+int lwlibav_construct_index_CrLwi
 (
     lwlibav_file_handler_t         *lwhp,
     lwlibav_video_decode_handler_t *vdhp,
@@ -60,9 +78,17 @@ int lwlibav_construct_index
     lwlibav_option_t               *opt,
     progress_indicator_t           *indicator,
     progress_handler_t             *php
+	,/* CrLwi */
+	crlwi_setting                  *setting  /* CrLwi */
 );
 
 int lwlibav_import_av_index_entry
 (
     lwlibav_decode_handler_t *dhp
 );
+
+
+
+
+
+

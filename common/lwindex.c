@@ -1969,7 +1969,40 @@ static void cleanup_index_helpers( lwindex_indexer_t *indexer, AVFormatContext *
     av_freep( &indexer->helpers );
 }
 
-static void create_index
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*==================================
+ * CreateLwi
+ *==================================*/
+#include <share.h>
+#include <unistd.h>  /* usleep */
+static void create_index_CrLwi
 (
     lwlibav_file_handler_t         *lwhp,
     lwlibav_video_decode_handler_t *vdhp,
@@ -1980,6 +2013,8 @@ static void create_index
     lwlibav_option_t               *opt,
     progress_indicator_t           *indicator,
     progress_handler_t             *php
+    ,  /* CrLwi */
+    crlwi_setting                  *setting  /* CrLwi */
 )
 {
     uint32_t video_info_count = 1 << 16;
@@ -2014,8 +2049,13 @@ static void create_index
         </LibavReaderIndexFile>
      */
     char index_path[512] = { 0 };
-    sprintf( index_path, "%s.lwi", lwhp->file_path );
-    FILE *index = !opt->no_create_index ? lw_fopen( index_path, "wb" ) : NULL;
+    /*==================================*/
+    /* CrLwi */
+    sprintf( index_path, "%s", setting->lwi_path );
+    FILE *index = !opt->no_create_index ? _fsopen( index_path, "wb", _SH_DENYWR ) : NULL;
+    //sprintf( index_path, "%s.lwi", lwhp->file_path );
+    //FILE *index = !opt->no_create_index ? lw_fopen( index_path, "wb" ) : NULL;
+    /*==================================*/
     if( !index && !opt->no_create_index )
     {
         free( video_info );
@@ -2043,7 +2083,12 @@ static void create_index
         fprintf( index, "<LSMASHWorksIndexVersion=%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 ">\n",
                  lwindex_version[0], lwindex_version[1], lwindex_version[2], lwindex_version[3] );
         fprintf( index, "<LibavReaderIndexFile=%d>\n", LWINDEX_INDEX_FILE_VERSION );
-        fprintf( index, "<InputFilePath>%s</InputFilePath>\n", lwhp->file_path );
+
+        /*==================================*/
+        /* CrLwi */
+        fprintf( index, "<InputFilePath>%s</InputFilePath>\n", setting->file_path_inner_lwi );
+        //fprintf( index, "<InputFilePath>%s</InputFilePath>\n", lwhp->file_path );
+        /*==================================*/
         fprintf( index, "<LibavReaderIndex=0x%08x,%d,%s>\n", lwhp->format_flags, lwhp->raw_demuxer, lwhp->format_name );
         video_index_pos = ftell( index );
         fprintf( index, "<ActiveVideoStreamIndex>%+011d</ActiveVideoStreamIndex>\n", -1 );
@@ -2064,6 +2109,17 @@ static void create_index
     uint64_t  audio_duration        = 0;
     int64_t   first_dts             = AV_NOPTS_VALUE;
     int64_t   filesize              = avio_size( format_ctx->pb );
+    /*==================================*/
+    /* CrLwi */
+    double tick_read_size = 0;          /* read size in 200ms */
+    double read_limit_Bsec = setting->read_limit_MiBsec * 1024 * 1024;
+    clock_t time_tick_begin = clock();  /* start time of calculate */
+    int64_t previous_bytes_read = 0;
+    FILE *fp_footer;
+    char footer_path[_MAX_PATH] = { 0 };
+    sprintf( footer_path, "%s%s", setting->lwi_path, "footer" );
+    int time_flush_footer = clock();
+    /*==================================*/
     if( indicator->open )
         indicator->open( php );
     /* Start to read frames and write the index file. */
@@ -2078,6 +2134,28 @@ static void create_index
     };
     while( read_av_frame( format_ctx, &pkt ) >= 0 )
     {
+        /*==================================*/
+        /* CrLwi */
+        /* read limit */
+        if ( setting->mode_pipe_input == false && 0 < read_limit_Bsec )
+        {
+          /* read size in 200ms */
+          tick_read_size += format_ctx->pb->bytes_read - previous_bytes_read;
+          previous_bytes_read = format_ctx->pb->bytes_read;
+          double elapse_ms = (double)( clock() - time_tick_begin) / CLOCKS_PER_SEC * 1000;
+          /* reset 200ms tick */
+          if ( 200 <= elapse_ms )
+          {
+              time_tick_begin = clock();
+              tick_read_size = 0;
+          }
+          if ( 1.0 * read_limit_Bsec * (200.0 / 1000.0) < tick_read_size )
+          {
+              int sleep = 200 - elapse_ms;
+              usleep( sleep );
+          }
+        }
+        /*==================================*/
         AVStream          *stream   = format_ctx->streams[ pkt.stream_index ];
         AVCodecParameters *codecpar = stream->codecpar;
         if( codecpar->codec_type != AVMEDIA_TYPE_VIDEO
@@ -2381,30 +2459,165 @@ static void create_index
                          av_get_sample_fmt_name( pkt_ctx->sample_fmt ) ? av_get_sample_fmt_name( pkt_ctx->sample_fmt ) : "none",
                          bits_per_sample, frame_length );
         }
-        if( indicator->update )
+
+        /*==================================*/
+        /* CrLwi */
+        /* skip progress dialog */
+        av_packet_unref( &pkt );
+//        if( indicator->update )
+//        {
+//            /* Update progress dialog. */
+//            int percent = 0;
+//            if( first_dts == AV_NOPTS_VALUE )
+//                first_dts = pkt.dts;
+//            if( filesize > 0 && pkt.pos > 0 )
+//                /* Update if packet's file offset is valid. */
+//                percent = (int)(100.0 * ((double)pkt.pos / filesize) + 0.5);
+//            else if( format_ctx->duration > 0 && first_dts != AV_NOPTS_VALUE && pkt.dts != AV_NOPTS_VALUE )
+//                /* Update if packet's DTS is valid. */
+//                percent = (int)(100.0
+//                             * (pkt.dts - first_dts) * (stream->time_base.num / (double)stream->time_base.den)
+//                             / (format_ctx->duration / AV_TIME_BASE)
+//                             + 0.5);
+//            const char *message = index ? "Creating Index file" : "Parsing input file";
+//            int abort = indicator->update( php, message, percent );
+//            av_packet_unref( &pkt );
+//            if( abort )
+//                goto fail_index;
+//        }
+//        else
+//            av_packet_unref( &pkt );
+        /*==================================*/
+
+
+        /*==================================*/
+        /* CrLwi footer */
+        /*   flush the footer file every 6 sec */
+        double elapse_flush_footer = (double)( clock() - time_flush_footer ) / CLOCKS_PER_SEC * 1000;
+        if ( setting->create_footer && 6 * 1000 <= elapse_flush_footer )
         {
-            /* Update progress dialog. */
-            int percent = 0;
-            if( first_dts == AV_NOPTS_VALUE )
-                first_dts = pkt.dts;
-            if( filesize > 0 && pkt.pos > 0 )
-                /* Update if packet's file offset is valid. */
-                percent = (int)(100.0 * ((double)pkt.pos / filesize) + 0.5);
-            else if( format_ctx->duration > 0 && first_dts != AV_NOPTS_VALUE && pkt.dts != AV_NOPTS_VALUE )
-                /* Update if packet's DTS is valid. */
-                percent = (int)(100.0
-                             * (pkt.dts - first_dts) * (stream->time_base.num / (double)stream->time_base.den)
-                             / (format_ctx->duration / AV_TIME_BASE)
-                             + 0.5);
-            const char *message = index ? "Creating Index file" : "Parsing input file";
-            int abort = indicator->update( php, message, percent );
-            av_packet_unref( &pkt );
-            if( abort )
-                goto fail_index;
-        }
-        else
-            av_packet_unref( &pkt );
-    }
+            time_flush_footer = clock();
+            /* reopen */
+            fp_footer = _fsopen( footer_path, "wb", _SH_DENYWR );
+            if ( fp_footer )
+            {
+                print_index( fp_footer, "</LibavReaderIndex>\n" );/* CrLwi  fp --> fp_footer */
+//                /* Deallocate video frame info if no active video stream. */
+//                if( vdhp->stream_index < 0 )
+//                    lw_freep( &video_info );
+//                /* Deallocate audio frame info if no active audio stream. */
+//                if( adhp->stream_index < 0 )
+//                    lw_freep( &audio_info );
+//                else
+//                {
+//                    /* .... */
+//                }
+                for( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
+                {
+                    /*CrLwi  pipe input cannot determine the duration.*/
+                    AVStream *stream = format_ctx->streams[stream_index];
+                    if( stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                     || stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
+                        print_index( fp_footer, "<StreamDuration=%d,%d>%" PRId64 "</StreamDuration>\n",
+                                     stream_index, stream->codecpar->codec_type, -1LL);/* CrLwi  fp --> fp_footer */
+                }
+//                if( !strcmp( lwhp->format_name, "asf" ) )
+//                {
+//                    /*....*/
+//                }
+                for( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
+                {
+                    AVStream *stream = format_ctx->streams[stream_index];
+                    if( stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO )
+                    {
+                        print_index( fp_footer, "<StreamIndexEntries=%d,%d,%d>\n", stream_index, AVMEDIA_TYPE_VIDEO, stream->nb_index_entries );/* CrLwi  fp --> fp_footer */
+                        if( vdhp->stream_index != stream_index )
+                            for( int i = 0; i < stream->nb_index_entries; i++ )
+                                write_av_index_entry( fp_footer, &stream->index_entries[i] );/* CrLwi  fp --> fp_footer */
+                        else if( stream->nb_index_entries > 0 )
+                        {
+                            vdhp->index_entries = (AVIndexEntry *)av_malloc( stream->index_entries_allocated_size );
+                            if( !vdhp->index_entries )
+                                goto fail_index;
+                            for( int i = 0; i < stream->nb_index_entries; i++ )
+                            {
+                                AVIndexEntry *ie = &stream->index_entries[i];
+                                vdhp->index_entries[i] = *ie;
+                                write_av_index_entry( fp_footer, ie );/* CrLwi  fp --> fp_footer */
+                            }
+                            vdhp->index_entries_count = stream->nb_index_entries;
+                        }
+                        print_index( fp_footer, "</StreamIndexEntries>\n" );/* CrLwi  fp --> fp_footer */
+                    }
+                    else if( stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
+                    {
+                        print_index( fp_footer, "<StreamIndexEntries=%d,%d,%d>\n", stream_index, AVMEDIA_TYPE_AUDIO, stream->nb_index_entries );/* CrLwi  fp --> fp_footer */
+                        if( adhp->stream_index != stream_index )
+                            for( int i = 0; i < stream->nb_index_entries; i++ )
+                                write_av_index_entry( fp_footer, &stream->index_entries[i] );/* CrLwi  change fp to fp_footer */
+                        else if( stream->nb_index_entries > 0 )
+                        {
+                            /* Audio stream in matroska container requires index_entries for seeking.
+                             * This avoids for re-reading the file to create index_entries since the file will be closed once. */
+                            adhp->index_entries = (AVIndexEntry *)av_malloc( stream->index_entries_allocated_size );
+                            if( !adhp->index_entries )
+                                goto fail_index;
+                            for( int i = 0; i < stream->nb_index_entries; i++ )
+                            {
+                                AVIndexEntry *ie = &stream->index_entries[i];
+                                adhp->index_entries[i] = *ie;
+                                write_av_index_entry( fp_footer, ie );      /* CrLwi  fp --> fp_footer */
+                            }
+                            adhp->index_entries_count = stream->nb_index_entries;
+                        }
+                        print_index( fp_footer, "</StreamIndexEntries>\n" );/* CrLwi  fp --> fp_footer */
+                    }
+                }
+                for( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
+                {
+                    AVStream          *stream   = format_ctx->streams[stream_index];
+                    AVCodecParameters *codecpar = stream->codecpar;
+                    if( codecpar->codec_type == AVMEDIA_TYPE_VIDEO || codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
+                    {
+                        lwindex_helper_t *helper = get_index_helper( &indexer, stream );
+                        if( !helper || !helper->codec_ctx )
+                            continue;
+                        lwlibav_extradata_handler_t *list = &helper->exh;
+                        void (*write_av_extradata)( FILE *, lwlibav_extradata_t * ) = codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                                                                                     ? write_video_extradata
+                                                                                     : write_audio_extradata;
+                        print_index( fp_footer, "<ExtraDataList=%d,%d,%d>\n", stream_index, codecpar->codec_type, list->entry_count );/* CrLwi  fp --> fp_footer */
+                        if( ( codecpar->codec_type == AVMEDIA_TYPE_VIDEO && stream_index == vdhp->stream_index )
+                         || ( codecpar->codec_type == AVMEDIA_TYPE_AUDIO && stream_index == adhp->stream_index ) )
+                        {
+                            for( int i = 0; i < list->entry_count; i++ )
+                                write_av_extradata( fp_footer, &list->entries[i] );/* CrLwi  fp --> fp_footer */
+                            lwlibav_extradata_handler_t *exhp = codecpar->codec_type == AVMEDIA_TYPE_VIDEO ? &vdhp->exh : &adhp->exh;
+                            exhp->entry_count   = list->entry_count;
+                            exhp->entries       = list->entries;
+                            exhp->current_index = codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                                                ? video_info[1].extradata_index
+                                                : audio_info[1].extradata_index;
+                            /* CrLwi  skip to release the list->entries */
+                            /* Avoid freeing entries. */
+                            //list->entry_count = 0;
+                            //list->entries     = NULL;
+                        }
+                        else
+                            for( int i = 0; i < list->entry_count; i++ )
+                                write_av_extradata( fp_footer, &list->entries[i] );/* CrLwi  fp --> fp_footer */
+                        print_index( fp_footer, "</ExtraDataList>\n" );            /* CrLwi  fp --> fp_footer */
+                    }
+                }
+                print_index( fp_footer, "</LibavReaderIndexFile>\n" );
+                fclose( fp_footer );
+            }/* if ( fp_footer ) */
+        }/* if ( setting->create_footer ) */
+    /*==================================*/
+    }/* while */
+
+
+
     /* Handle delay derived from the audio decoder. */
     for( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
     {
@@ -2479,14 +2692,56 @@ static void create_index
             adhp->dv_in_avi = 0;
         }
     }
-    for( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
+    /*==================================*/
+    /* CrLwi */
+    if ( setting->mode_pipe_input )
     {
-        AVStream *stream = format_ctx->streams[stream_index];
-        if( stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
-         || stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
-            print_index( index, "<StreamDuration=%d,%d>%" PRId64 "</StreamDuration>\n",
-                         stream_index, stream->codecpar->codec_type, stream->duration );
+        /* pipe */
+        /* pipe input cannot determine the duration.  reopen the file */
+        AVFormatContext *format_ctx_reopen = NULL;
+        if ( !lavf_open_file(&format_ctx_reopen, setting->file_path, NULL) )
+        {
+            for ( unsigned int stream_index = 0; stream_index < format_ctx_reopen->nb_streams; stream_index++ )
+            {
+                AVStream *stream_re = format_ctx_reopen->streams[stream_index];
+                if ( stream_re->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                 || stream_re->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
+                {
+                    print_index( index, "<StreamDuration=%d,%d>%" PRId64 "</StreamDuration>\n",
+                                 stream_index, stream_re->codecpar->codec_type, stream_re->duration );
+                }
+            }
+            lavf_close_file( &format_ctx_reopen );
+        }
+        else
+        {
+            /* fail to open */
+            /* <StreamDuration=0,1>-9223372036854775808</StreamDuration> */
+            for ( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
+            {
+                AVStream *stream = format_ctx->streams[stream_index];
+                if( stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+                 || stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
+                    print_index( index, "<StreamDuration=%d,%d>%" PRId64 "</StreamDuration>\n",
+                            stream_index, stream->codecpar->codec_type, stream->duration );
+            }
+        }
     }
+    else
+    {
+        /* file */
+        for( unsigned int stream_index = 0; stream_index < format_ctx->nb_streams; stream_index++ )
+        {
+            AVStream *stream = format_ctx->streams[stream_index];
+            if( stream->codecpar->codec_type == AVMEDIA_TYPE_VIDEO
+             || stream->codecpar->codec_type == AVMEDIA_TYPE_AUDIO )
+                print_index( index, "<StreamDuration=%d,%d>%" PRId64 "</StreamDuration>\n",
+                             stream_index, stream->codecpar->codec_type, stream->duration );
+        }
+    }
+    /*==================================*/
+
+
     if( !strcmp( lwhp->format_name, "asf" ) )
     {
         /* Pretty hackish workaround for the ASF demuxer
@@ -3186,7 +3441,24 @@ fail_parsing:
     return -1;
 }
 
-int lwlibav_construct_index
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/*==================================
+ * CreateLwi
+ *==================================*/
+int lwlibav_construct_index_CrLwi
 (
     lwlibav_file_handler_t         *lwhp,
     lwlibav_video_decode_handler_t *vdhp,
@@ -3197,59 +3469,69 @@ int lwlibav_construct_index
     lwlibav_option_t               *opt,
     progress_indicator_t           *indicator,
     progress_handler_t             *php
+    ,/* CrLwi */
+    crlwi_setting                  *setting  /* CrLwi */
 )
 {
-    /* Try to open the index file. */
-    size_t file_path_length = strlen( opt->file_path );
-    char *index_file_path = (char *)lw_malloc_zero(file_path_length + 5);
-    if( !index_file_path )
-        return -1;
-    memcpy( index_file_path, opt->file_path, file_path_length );
-    const char *ext = file_path_length >= 5 ? &opt->file_path[file_path_length - 4] : NULL;
-    int has_lwi_ext = ext && !strncmp( ext, ".lwi", strlen( ".lwi" ) );
-    if( has_lwi_ext )
-        index_file_path[file_path_length] = '\0';
-    else
+//    /* Try to open the index file. */
+//    size_t file_path_length = strlen( opt->file_path );
+//    char *index_file_path = (char *)lw_malloc_zero(file_path_length + 5);
+//    if( !index_file_path )
+//        return -1;
+//    memcpy( index_file_path, opt->file_path, file_path_length );
+//    const char *ext = file_path_length >= 5 ? &opt->file_path[file_path_length - 4] : NULL;
+//    int has_lwi_ext = ext && !strncmp( ext, ".lwi", strlen( ".lwi" ) );
+//    if( has_lwi_ext )
+//        index_file_path[file_path_length] = '\0';
+//    else
+//    {
+//        memcpy( index_file_path + file_path_length, ".lwi", strlen( ".lwi" ) );
+//        index_file_path[file_path_length + 4] = '\0';
+//    }
+    /*==================================*/
+    if ( setting->mode_pipe_input == false )/* CrLwi */
     {
-        memcpy( index_file_path + file_path_length, ".lwi", strlen( ".lwi" ) );
-        index_file_path[file_path_length + 4] = '\0';
-    }
-    FILE *index = lw_fopen( index_file_path, (opt->force_video || opt->force_audio) ? "r+b" : "rb" );
-    free( index_file_path );
-    if( index )
-    {
-        uint8_t lwindex_version[4] = { 0 };
-        int index_file_version = 0;
-        if( 4 == fscanf( index, "<LSMASHWorksIndexVersion=%" SCNu8 ".%" SCNu8 ".%" SCNu8 ".%" SCNu8 ">\n",
-                         &lwindex_version[0], &lwindex_version[1], &lwindex_version[2], &lwindex_version[3] )
-         && ((lwindex_version[0] << 24) | (lwindex_version[1] << 16) | (lwindex_version[2] << 8) | lwindex_version[3]) == LWINDEX_VERSION
-         && 1 == fscanf( index, "<LibavReaderIndexFile=%d>\n", &index_file_version )
-         && index_file_version == LWINDEX_INDEX_FILE_VERSION
-         && parse_index( lwhp, vdhp, vohp, adhp, aohp, opt, index ) == 0 )
+        FILE *index = lw_fopen( setting->lwi_path, (opt->force_video || opt->force_audio) ? "r+b" : "rb" );/* CrLwi */
+//      FILE *index = lw_fopen( index_file_path, (opt->force_video || opt->force_audio) ? "r+b" : "rb" );
+//      free( index_file_path );
+        if( index )
         {
-            /* Opening and parsing the index file succeeded. */
+            uint8_t lwindex_version[4] = { 0 };
+            int index_file_version = 0;
+            if( 4 == fscanf( index, "<LSMASHWorksIndexVersion=%" SCNu8 ".%" SCNu8 ".%" SCNu8 ".%" SCNu8 ">\n",
+                              &lwindex_version[0], &lwindex_version[1], &lwindex_version[2], &lwindex_version[3] )
+                && ((lwindex_version[0] << 24) | (lwindex_version[1] << 16) | (lwindex_version[2] << 8) | lwindex_version[3]) == LWINDEX_VERSION
+                && 1 == fscanf( index, "<LibavReaderIndexFile=%d>\n", &index_file_version )
+                && index_file_version == LWINDEX_INDEX_FILE_VERSION
+                && parse_index( lwhp, vdhp, vohp, adhp, aohp, opt, index ) == 0 )
+            {
+                /* Opening and parsing the index file succeeded. */
+                fclose( index );
+                av_register_all();
+                avcodec_register_all();
+                lwhp->threads = opt->threads;
+                return 0;
+            }
             fclose( index );
-            av_register_all();
-            avcodec_register_all();
-            lwhp->threads = opt->threads;
-            return 0;
         }
-        fclose( index );
-    }
+    }/* CrLwi */
+    /*==================================*/
     /* Open file. */
-    if( !lwhp->file_path )
-    {
-        lwhp->file_path = (char *)lw_malloc_zero( file_path_length + 1 );
-        if( !lwhp->file_path )
-            goto fail;
-        memcpy( lwhp->file_path, opt->file_path, file_path_length );
-        if( has_lwi_ext )
-            lwhp->file_path[file_path_length - 4] = '\0';
-    }
+//    if( !lwhp->file_path )
+//    {
+//        lwhp->file_path = (char *)lw_malloc_zero( file_path_length + 1 );
+//        if( !lwhp->file_path )
+//            goto fail;
+//        memcpy( lwhp->file_path, opt->file_path, file_path_length );
+//        if( has_lwi_ext )
+//            lwhp->file_path[file_path_length - 4] = '\0';
+//    }
     av_register_all();
     avcodec_register_all();
     AVFormatContext *format_ctx = NULL;
-    if( lavf_open_file( &format_ctx, lwhp->file_path, lhp ) )
+    //av_log_set_level( AV_LOG_FATAL );  /* CrLwi */
+    //if( lavf_open_file( &format_ctx, lwhp->file_path, lhp ) )
+    if( lavf_open_file( &format_ctx, setting->src_path, lhp ) ) /* CrLwi */
     {
         if( format_ctx )
             lavf_close_file( &format_ctx );
@@ -3259,7 +3541,8 @@ int lwlibav_construct_index
     vdhp->stream_index = -1;
     adhp->stream_index = -1;
     /* Create the index file. */
-    create_index( lwhp, vdhp, vohp, adhp, aohp, format_ctx, opt, indicator, php );
+    //create_index( lwhp, vdhp, vohp, adhp, aohp, format_ctx, opt, indicator, php );
+    create_index_CrLwi( lwhp, vdhp, vohp, adhp, aohp, format_ctx, opt, indicator, php, setting );  /* CrLwi */
     /* Close file.
      * By opening file for video and audio separately, indecent work about frame reading can be avoidable. */
     lavf_close_file( &format_ctx );
@@ -3289,3 +3572,15 @@ int lwlibav_import_av_index_entry
     }
     return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+

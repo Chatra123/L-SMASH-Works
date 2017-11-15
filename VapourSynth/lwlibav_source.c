@@ -230,94 +230,131 @@ static void VS_CC vs_filter_free( void *instance_data, VSCore *core, const VSAPI
     free_handler( (lwlibav_handler_t **)&instance_data );
 }
 
+
+
+
+
+
+
+
+/*==================================
+ * CreateLwi
+ *==================================*/
 void VS_CC vs_lwlibavsource_create( const VSMap *in, VSMap *out, void *user_data, VSCore *core, const VSAPI *vsapi )
 {
-    const char *file_path = vsapi->propGetData( in, "source", 0, NULL );
+   /* CreateLwi dummy func */
+}
+
+void VS_CC vs_lwlibavsource_create_CrLwi( const VSMap *in, VSMap *out, void *user_data, VSCore *core, const VSAPI *vsapi,
+                                                crlwi_setting *setting)
+{
+//    const char *file_path = vsapi->propGetData( in, "source", 0, NULL );
     /* Allocate the handler of this filter function. */
     lwlibav_handler_t *hp = alloc_handler();
     if( !hp )
     {
-        vsapi->setError( out, "lsmas: failed to allocate the LW-Libav handler." );
+        //vsapi->setError( out, "lsmas: failed to allocate the LW-Libav handler." );
         return;
     }
     lwlibav_file_handler_t         *lwhp = &hp->lwh;
     lwlibav_video_decode_handler_t *vdhp = hp->vdhp;
     lwlibav_video_output_handler_t *vohp = hp->vohp;
-    vs_video_output_handler_t *vs_vohp = vs_allocate_video_output_handler( vohp );
-    if( !vs_vohp )
-    {
-        free_handler( &hp );
-        vsapi->setError( out, "lsmas: failed to allocate the VapourSynth video output handler." );
-        return;
-    }
+//    vs_video_output_handler_t *vs_vohp = vs_allocate_video_output_handler( vohp );
+//    if( !vs_vohp )
+//    {
+//        free_handler( &hp );
+//        vsapi->setError( out, "lsmas: failed to allocate the VapourSynth video output handler." );
+//        return;
+//    }
     /* Set up VapourSynth error handler. */
-    vs_basic_handler_t vsbh = { 0 };
-    vsbh.out       = out;
-    vsbh.frame_ctx = NULL;
-    vsbh.vsapi     = vsapi;
+//    vs_basic_handler_t vsbh = { 0 };
+//    vsbh.out       = out;
+//    vsbh.frame_ctx = NULL;
+//    vsbh.vsapi     = vsapi;
     /* Set up log handler. */
     lw_log_handler_t lh = { 0 };
-    lh.level    = LW_LOG_FATAL;
-    lh.priv     = &vsbh;
-    lh.show_log = set_error;
+//    lh.level    = LW_LOG_FATAL;
+//    lh.priv     = &vsbh;
+//    lh.show_log = set_error;
     /* Get options. */
-    int64_t stream_index;
-    int64_t threads;
-    int64_t cache_index;
-    int64_t seek_mode;
-    int64_t seek_threshold;
-    int64_t variable_info;
-    int64_t direct_rendering;
-    int64_t fps_num;
-    int64_t fps_den;
-    int64_t apply_repeat_flag;
-    int64_t field_dominance;
-    const char *format;
-    const char *preferred_decoder_names;
-    set_option_int64 ( &stream_index,           -1,    "stream_index",   in, vsapi );
-    set_option_int64 ( &threads,                 0,    "threads",        in, vsapi );
-    set_option_int64 ( &cache_index,             1,    "cache",          in, vsapi );
-    set_option_int64 ( &seek_mode,               0,    "seek_mode",      in, vsapi );
-    set_option_int64 ( &seek_threshold,          10,   "seek_threshold", in, vsapi );
-    set_option_int64 ( &variable_info,           0,    "variable",       in, vsapi );
-    set_option_int64 ( &direct_rendering,        0,    "dr",             in, vsapi );
-    set_option_int64 ( &fps_num,                 0,    "fpsnum",         in, vsapi );
-    set_option_int64 ( &fps_den,                 1,    "fpsden",         in, vsapi );
-    set_option_int64 ( &apply_repeat_flag,       0,    "repeat",         in, vsapi );
-    set_option_int64 ( &field_dominance,         0,    "dominance",      in, vsapi );
-    set_option_string( &format,                  NULL, "format",         in, vsapi );
-    set_option_string( &preferred_decoder_names, NULL, "decoder",        in, vsapi );
-    set_preferred_decoder_names_on_buf( hp->preferred_decoder_names_buf, preferred_decoder_names );
+//    int64_t stream_index;
+//    int64_t threads;
+//    int64_t cache_index;
+//    int64_t seek_mode;
+//    int64_t seek_threshold;
+//    int64_t variable_info;
+//    int64_t direct_rendering;
+//    int64_t fps_num;
+//    int64_t fps_den;
+//    int64_t apply_repeat_flag;
+//    int64_t field_dominance;
+//    const char *format;
+//    const char *preferred_decoder_names;
+//    set_option_int64 ( &stream_index,           -1,    "stream_index",   in, vsapi );
+//    set_option_int64 ( &threads,                 0,    "threads",        in, vsapi );
+//    set_option_int64 ( &cache_index,             1,    "cache",          in, vsapi );
+//    set_option_int64 ( &seek_mode,               0,    "seek_mode",      in, vsapi );
+//    set_option_int64 ( &seek_threshold,          10,   "seek_threshold", in, vsapi );
+//    set_option_int64 ( &variable_info,           0,    "variable",       in, vsapi );
+//    set_option_int64 ( &direct_rendering,        0,    "dr",             in, vsapi );
+//    set_option_int64 ( &fps_num,                 0,    "fpsnum",         in, vsapi );
+//    set_option_int64 ( &fps_den,                 1,    "fpsden",         in, vsapi );
+//    set_option_int64 ( &apply_repeat_flag,       0,    "repeat",         in, vsapi );
+//    set_option_int64 ( &field_dominance,         0,    "dominance",      in, vsapi );
+//    set_option_string( &format,                  NULL, "format",         in, vsapi );
+//    set_option_string( &preferred_decoder_names, NULL, "decoder",        in, vsapi );
+//    set_preferred_decoder_names_on_buf( hp->preferred_decoder_names_buf, preferred_decoder_names );
+    /* Set options. */
+//    lwlibav_option_t opt;
+//    opt.file_path         = file_path;
+//    opt.threads           = threads >= 0 ? threads : 0;
+//    opt.av_sync           = 0;
+//    opt.no_create_index   = !cache_index;
+//    opt.force_video       = (stream_index >= 0);
+//    opt.force_video_index = stream_index >= 0 ? stream_index : -1;
+//    opt.force_audio       = 0;
+//    opt.force_audio_index = -1;
+//    opt.apply_repeat_flag = apply_repeat_flag;
+//    opt.field_dominance   = CLIP_VALUE( field_dominance, 0, 2 );    /* 0: Obey source flags, 1: TFF, 2: BFF */
+//    opt.vfr2cfr.active    = fps_num > 0 && fps_den > 0 ? 1 : 0;
+//    opt.vfr2cfr.fps_num   = fps_num;
+//    opt.vfr2cfr.fps_den   = fps_den;
+    //==================================
+    /* CrLwi */
     /* Set options. */
     lwlibav_option_t opt;
-    opt.file_path         = file_path;
-    opt.threads           = threads >= 0 ? threads : 0;
+    opt.file_path         = "";
+    opt.threads           = 0;
     opt.av_sync           = 0;
-    opt.no_create_index   = !cache_index;
-    opt.force_video       = (stream_index >= 0);
-    opt.force_video_index = stream_index >= 0 ? stream_index : -1;
+    opt.no_create_index   = 0;
+    opt.force_video       = 0;
+    opt.force_video_index = 0;
     opt.force_audio       = 0;
     opt.force_audio_index = -1;
-    opt.apply_repeat_flag = apply_repeat_flag;
-    opt.field_dominance   = CLIP_VALUE( field_dominance, 0, 2 );    /* 0: Obey source flags, 1: TFF, 2: BFF */
-    opt.vfr2cfr.active    = fps_num > 0 && fps_den > 0 ? 1 : 0;
-    opt.vfr2cfr.fps_num   = fps_num;
-    opt.vfr2cfr.fps_den   = fps_den;
-    lwlibav_video_set_seek_mode              ( vdhp, CLIP_VALUE( seek_mode,      0, 2 ) );
-    lwlibav_video_set_forward_seek_threshold ( vdhp, CLIP_VALUE( seek_threshold, 1, 999 ) );
-    lwlibav_video_set_preferred_decoder_names( vdhp, tokenize_preferred_decoder_names( hp->preferred_decoder_names_buf ) );
-    vs_vohp->variable_info          = CLIP_VALUE( variable_info,     0, 1 );
-    vs_vohp->direct_rendering       = CLIP_VALUE( direct_rendering,  0, 1 ) && !format;
-    vs_vohp->vs_output_pixel_format = vs_vohp->variable_info ? pfNone : get_vs_output_pixel_format( format );
+    opt.apply_repeat_flag = 1;
+    opt.field_dominance   = 0;    /* 0: Obey source flags, 1: TFF, 2: BFF */
+    opt.vfr2cfr.active    = 0;
+    opt.vfr2cfr.fps_num   = 0;
+    opt.vfr2cfr.fps_den   = 1;
+    //==================================
+
+//    lwlibav_video_set_seek_mode              ( vdhp, CLIP_VALUE( seek_mode,      0, 2 ) );
+//    lwlibav_video_set_forward_seek_threshold ( vdhp, CLIP_VALUE( seek_threshold, 1, 999 ) );
+//    lwlibav_video_set_preferred_decoder_names( vdhp, tokenize_preferred_decoder_names( hp->preferred_decoder_names_buf ) );
+//    vs_vohp->variable_info          = CLIP_VALUE( variable_info,     0, 1 );
+//    vs_vohp->direct_rendering       = CLIP_VALUE( direct_rendering,  0, 1 ) && !format;
+//    vs_vohp->vs_output_pixel_format = vs_vohp->variable_info ? pfNone : get_vs_output_pixel_format( format );
     /* Set up progress indicator. */
     progress_indicator_t indicator;
     indicator.open   = NULL;
     indicator.update = NULL;
     indicator.close  = NULL;
     /* Construct index. */
-    int ret = lwlibav_construct_index( lwhp, vdhp, vohp, hp->adhp, hp->aohp, &lh, &opt, &indicator, NULL );
+    //int ret = lwlibav_construct_index( lwhp, vdhp, vohp, hp->adhp, hp->aohp, &lh, &opt, &indicator, NULL);
+    int ret = lwlibav_construct_index_CrLwi( lwhp, vdhp, vohp, hp->adhp, hp->aohp, &lh, &opt, &indicator, NULL, setting);  /* CrLwi */
     lwlibav_audio_free_decode_handler_ptr( &hp->adhp );
     lwlibav_audio_free_output_handler_ptr( &hp->aohp );
+    return;  /* CrLwi: index created. exit app. */
     if( ret < 0 )
     {
         vs_filter_free( hp, core, vsapi );
@@ -345,3 +382,9 @@ void VS_CC vs_lwlibavsource_create( const VSMap *in, VSMap *out, void *user_data
     vsapi->createFilter( in, out, "LWLibavSource", vs_filter_init, vs_filter_get_frame, vs_filter_free, fmUnordered, nfMakeLinear, hp, core );
     return;
 }
+
+
+
+
+
+
